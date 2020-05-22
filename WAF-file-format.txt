@@ -55,7 +55,7 @@ Also ideally a symlink to the main file (see last URL path thing below) should b
 
 
 I thought this thing did the same as I was trying: https://github.com/robrohan/WebArchiveExtractor
-But it only works for Safari .webarchive files, and it fails on the only such file I seem to have, it's CRAP!
+But it only works for Safari .webarchive files, and it fails on the only such file I seem to have.
 So it still makes a lot of sense to keep on making a replacement for WebArchivConverter.
 
 Appendix:
