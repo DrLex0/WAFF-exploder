@@ -1,14 +1,73 @@
 #!/usr/bin/perl
 # Expands MSIE (Macintosh Internet Explorer) web archive files (WAFF format).
+#
+# BSD 2-Clause License
+#
+# Copyright (c) 2020, Alexander Thomas
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use strict;
 use warnings;
 use Fcntl qw(SEEK_SET SEEK_CUR);
 use File::Path qw(make_path);
 
-my $bVerbose = 1;
+my $VERSION = '0.1';
+my $verbose = 0;
 
-die "Usage: $0 inputFile [..]\n" if($#ARGV < 0);
+sub usage()
+{
+	print "Usage: $0 [-v] inputFile [inputFile2 ..]\n".
+	      "Expands MSIE (Macintosh Internet Explorer) web archive files (WAFF format).\n".
+	      "Version: ${VERSION}\n".
+	      "  -v enables verbose output.\n";
+}
+
+while($#ARGV > -1 && substr($ARGV[0], 0, 1) eq '-') {
+	if($ARGV[0] eq '--') {
+		shift;
+		last;
+	}
+	foreach my $opt (split('', substr($ARGV[0], 1))) {
+		if($opt eq 'v') {
+			$verbose = 1;
+		}
+		elsif($opt eq 'h') {
+			usage();
+			exit();
+		}
+		else {
+			print STDERR "Warning: ignoring unknown option '${opt}'\n";
+		}
+	}
+	shift;
+}
+
+if($#ARGV < 0) {
+	usage();
+	exit(2);
+}
+
 
 while(my $inFile = shift) {
 	my $dirName = $inFile;
@@ -24,7 +83,7 @@ while(my $inFile = shift) {
 		next;
 	}
 
-	print "Exploding ${inFile} to ${dirName}...\n" if($bVerbose);
+	print "Exploding ${inFile} to ${dirName}...\n" if($verbose);
 	open(my $fHandle, '<', $inFile) or die "ERROR: cannot read file '${inFile}': $!\n";
 
 	my $bits32;
@@ -37,7 +96,7 @@ while(my $inFile = shift) {
 
 	read($fHandle, $bits32, 4);
 	my $length = unpack('N', $bits32);
-	print "Header length: ${length}\n" if($bVerbose);
+	print "Header length: ${length}\n" if($verbose);
 	seek($fHandle, $length, SEEK_SET);
 
 	mkdir($dirName);
@@ -46,7 +105,7 @@ while(my $inFile = shift) {
 		read($fHandle, $bits32, 4);
 		if($bits32 eq 'cat ') {
 			close($fHandle);
-			print "'cat ' chunk reached, considering it end of file\n" if($bVerbose);
+			print "'cat ' chunk reached, considering it end of file\n" if($verbose);
 			last;
 		}
 		elsif($bits32 ne 'ntry') {
@@ -56,7 +115,7 @@ while(my $inFile = shift) {
 		}
 		read($fHandle, $bits32, 4);
 		$length = unpack('N', $bits32);
-		print "INFO: 'ntry' header of unexpected length, things may go haywire: ${length}\n" if($bVerbose && $length != 0x28);
+		print "INFO: 'ntry' header of unexpected length, things may go haywire: ${length}\n" if($verbose && $length != 0x28);
 		seek($fHandle, 0x20, SEEK_CUR);
 		read($fHandle, $bits32, 4);
 		my $dataLength = unpack('N', $bits32) - $length - 0x58;
@@ -65,14 +124,14 @@ while(my $inFile = shift) {
 		my $url;
 		read($fHandle, $bits32, 4);
 		my $fieldsLength = unpack('N', $bits32);
-		print "Fields length: ${fieldsLength}\n" if($bVerbose);
+		print "Fields length: ${fieldsLength}\n" if($verbose);
 		my $fieldsIndex = 0;
 		while($fieldsIndex < $fieldsLength) {
 			my $fieldName;
 			read($fHandle, $fieldName, 4);
 			read($fHandle, $bits32, 4);
 			$length = unpack('N', $bits32);
-			print "Field '${fieldName}' of length ${length}\n" if($bVerbose);
+			print "Field '${fieldName}' of length ${length}\n" if($verbose);
 			my $fieldData;
 			read($fHandle, $fieldData, $length);
 			# Beware of null-terminated strings
@@ -84,12 +143,12 @@ while(my $inFile = shift) {
 			print STDERR "ERROR: no URL found for entry, skipping it\n";
 		}
 		else {
-			print "URL: ${url}\n" if($bVerbose);
+			print "URL: ${url}\n" if($verbose);
 		}
 
 		# === data section ===
 		$dataLength -= $fieldsLength;
-		print "Data length: ${dataLength}\n" if($bVerbose);
+		print "Data length: ${dataLength}\n" if($verbose);
 		read($fHandle, $bits32, 4);
 		if($bits32 ne 'data') {
 			close($fHandle);
@@ -119,7 +178,7 @@ while(my $inFile = shift) {
 			}
 			my $filePath = "${dirName}/${dir}/${fileName}";
 
-			print "Saving to ${filePath}\n" if($bVerbose);
+			print "Creating: ${filePath}\n";
 			open($writeHandle, '>', $filePath) or die "FATAL: cannot write to '${filePath}'\n";
 		}
 		while($remaining) {
@@ -145,7 +204,7 @@ while(my $inFile = shift) {
 		}
 		read($fHandle, $bits32, 4);
 		$length = unpack('N', $bits32);
-		print "INFO: 'post' chunk of unexpected length in ${inFile}\n" if($bVerbose && $length != 4);
+		print "INFO: 'post' chunk of unexpected length in ${inFile}\n" if($verbose && $length != 4);
 		seek($fHandle, $length, SEEK_CUR);
 		# Now we should be skipping 0x80 (128) 'X' bytes. I guess at some moment
 		# in history someone at Microsoft knew what was the point of this.
@@ -158,7 +217,7 @@ while(my $inFile = shift) {
 		}
 		read($fHandle, $bits32, 4);
 		$length = unpack('N', $bits32);
-		print "INFO: 'cate' chunk of unexpected length in ${inFile}\n" if($bVerbose && $length != 0x20);
+		print "INFO: 'cate' chunk of unexpected length in ${inFile}\n" if($verbose && $length != 0x20);
 		seek($fHandle, $length, SEEK_CUR);
 	}
 	close($fHandle);
